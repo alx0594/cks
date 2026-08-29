@@ -6,9 +6,7 @@
 
 ## Reducing the Attack Surface
 
-![Reducing the
-
-Attack Surface](images/reducing-attack-surface.png)
+![Reducing the Attack Surface](images/reducing-attack-surface.png)
 
 ## Limiting Node Access
 

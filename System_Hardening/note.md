@@ -571,3 +571,565 @@ https://learn.kodekloud.com/learn/courses/certified-kubernetes-security-speciali
   ```
 
   ![AppArmor Directory](images/apparmor-profiles.png)
+
+# 31/08/2026
+
+## Security Contexts
+
+### Capabilities
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-demo-4
+spec:
+  containers:
+    - name: sec-ctx-4
+      image: gcr.io/google-samples/hello-app:2.0
+      securityContext:
+        capabilities:
+          add: ["NET_ADMIN", "SYS_TIME"]
+```
+
+### Users
+
+Remember, the user used will be the more specific. That case, will be: `runAsUser` inside of container spec.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: security-context-demo-2
+spec:
+  securityContext:
+    runAsUser: 1000
+  containers:
+    - name: sec-ctx-demo-2
+      image: gcr.io/google-samples/hello-app:2.0
+      securityContext:
+        runAsUser: 2000
+        allowPrivilegeEscalation: false
+```
+
+## Admission Controllers
+
+![Admission controller](images/admission-controle.png)
+
+### Enable admission controller
+
+![Enable Admission Controller](images/enable-admission-controller.png)
+
+Create TLS Secret:
+
+kubectl create secret tls webhook-server-tls --cert=/root/keys/webhook-server-tls.crt --key=/root/keys/webhook-server-tls.key -n webhook-demo
+
+## Pod Security Admission and Pod Security Standards
+
+### Configuring PSA
+
+Mode and Security Standard
+
+![Security Standard](images/psa-security-standard-mode.png)
+
+### Lab - Pod Security Admission.
+
+- Verify PodSecutrity admission is enable in cluster:
+
+  ```bash
+  kubectl exec -n kube-system kube-apiserver-controlplane \
+  -- kube-apiserver -h | grep enable-admission
+  ```
+
+- To enable Pod Security at the namespace level, you need to add pod security labels to the namespace using the following format:
+  `pod-security.kubernetes.io/<MODE>: <LEVEL>`
+
+- Related Pod Security at the namespace **level**, what are the different **levels** of Pod Security Standards?
+
+  - Privileged
+  - Baseline
+  - Restricted
+
+- We want to apply pod security on namespace alpha. To achieve that, add the following label to the namespace alpha
+  `k label ns alpha pod-security.kubernetes.io/warn=baseline`
+
+- How can a cluster administrator specify the configuration file path for the admission configuration resource in the API server?
+  `By using the --admission-control-config-file flag`
+
+- We can also use multiple pod security standards together for a single namespace.
+  `k label ns beta pod-security.kubernetes.io/enforce=baseline`
+  `k label ns beta pod-security.kubernetes.io/warn=restricted`
+
+- Inspect the manifest file below and select the correct statement on enforced policies and the restricted levels in the provided AdmissionConfiguration resource.
+
+  ```yaml
+  apiVersion: admissionregistration.k8s.io/v1
+  kind: AdmissionConfiguration
+  plugins:
+    - name: PodSecurity
+      configuration:
+        apiVersion: pod-security.admission.config.k8s.io/v1
+        kind: PodSecurityConfiguration
+        defaults:
+          enforce: baseline
+          enforce-version: latest
+          audit: restricted
+          audit-version: latest
+          warn: restricted
+          warn-version: latest
+        exemptions:
+          usernames: []
+          runtimeClassNames: []
+          namespaces: [my-namespace]
+  ```
+
+  `Baseline: Enforced, Restricted: Auditing and Warning`
+
+## Open Policy Agent (OPA)
+
+![OPA - Load Policy](images/OPA-load-policy.png)
+
+### Labs - OPA
+
+- What does OPA stand for?
+  `Open Policy Agent`
+
+- Install and run OPA:
+
+```bash
+# Find the given version of OPA from the release page.
+export VERSION=v0.38.1
+curl -L -o opa https://github.com/open-policy-agent/opa/releases/download/${VERSION}/opa_linux_amd64
+
+chmod 755 ./opa
+
+./opa run -s &
+```
+
+- Which language is used to write policies in OPA ?
+  `Rego`
+
+- Load policy /root/sample.rego to OPA with the name samplepolicy
+  `curl -X PUT --data-binary @sample.rego http://localhost:8181/v1/policies/samplepolicy`
+
+## OPA in Kubernetes
+
+![OPA - Constraint Framework](images/OPA-constraint-Framework.png)
+
+### Labs - OPA in Kubernetes
+
+- What needs to be done to enable `kube-mgmt` to automatically identify policies defined in kubernetes and load them into OPA?
+  `create configmap on Kubernetes with the label openpolicyagente.org/policy set to rego`
+
+- Create a configmap for OPA using the untrusted-registry.rego policy
+  `kubectl create configmap untrusted-registry --from-file=untrusted-registry.rego`
+
+- Create a configmap named unique-host using the rego file /root/unique-host.rego for OPA
+  `kubectl create configmap unique-host --from-file=unique-host.rego`
+
+### Lab - OPA Gatekeeper
+
+- Deploy Gatekeeper version 3.22.0 in the provided kubernetes cluster.
+  [Documentation](https://open-policy-agent.github.io/gatekeeper/website/docs/install/)
+
+  `kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.22.0/deploy/gatekeeper.yaml`
+
+- For this step, create an `ConstraintTemplate` with name `k8srequiredlabels` with target `admission.k8s.gatekeeper.sh` and using the following rego.
+  [ConstraintTemplate Documentatio](https://kubernetes.io/blog/2019/08/06/opa-gatekeeper-policy-and-governance-for-kubernetes/)
+
+  ```rego
+  package k8srequiredlabels
+
+        violation[{"msg": msg, "details": {"missing_labels": missing}}] {
+          provided := {label | input.review.object.metadata.labels[label]}
+          required := {label | label := input.parameters.labels[_]}
+          missing := required - provided
+          count(missing) > 0
+          msg := sprintf("you must provide labels: %v", [missing])
+        }
+  ```
+
+  **Template Yaml: [constraintTemplate.yaml](constraintTemplate.yaml)**
+
+- Now, let's create a Constraint named require-tech-label
+
+  **Resource Yaml: [require-labels.yaml](require-labels.yaml)**
+
+- Your team now wants to enforce a policy which enforces the number of replicas in deployments to be in range of 2 to 5 only.
+
+  - `kubectl apply -f ConstraintTemplate-k8sreplicaslimits.yaml`
+  - `kubectl apply -f K8sReplicaLimits.yaml.yaml`
+
+  **Template Yaml: [ConstraintTemplate](ConstraintTemplate-k8sreplicaslimits.yaml)**
+  **Template Yaml: [K8sReplicaLimits.yaml](K8sReplicaLimits.yaml)**
+
+## OPA summary
+
+**OPA → Gatekeeper → ConstraintTemplate → Constraint → Kubernetes blocks/accepts the resource.**
+
+### 1. First: what is OPA?
+
+Think about OPA as a **security rules engine**.
+
+Imagine your company has these Kubernetes rules:
+
+```
+❌ Pods cannot run as root.
+❌ Containers cannot use privileged: true.
+❌ Images cannot use the latest tag.
+✅ Every Pod must have certain labels.
+```
+
+Kubernetes does not automatically enforce all of your organization's custom rules.
+
+OPA can evaluate:
+
+> "Does this Kubernetes resource comply with our security policy?"
+
+```
+Developer
+   ↓
+kubectl apply
+   ↓
+Kubernetes API
+   ↓
+OPA checks the policy
+   ↓
+Allowed? ── YES → Create Pod
+        └── NO  → Reject Pod
+```
+
+### 2. Then what is OPA Gatekeeper?
+
+This distinction is very important:
+
+**OPA** is the general-purpose policy engine.
+
+**Gatekeeper** is a Kubernetes project that integrates OPA with Kubernetes admission control.
+
+So, for CKS, think:
+
+> **OPA knows how to evaluate policies. Gatekeeper brings that capability into Kubernetes.**
+
+```
+kubectl apply
+      ↓
+API Server
+      ↓
+Admission
+      ↓
+Gatekeeper
+      ↓
+OPA policy evaluation
+      ↓
+Allow / Deny
+```
+
+### 3. The simplest real example
+
+Suppose your company says:
+
+> "Every Pod must have the label team."
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+```
+
+There is no:
+
+```yaml
+labels:
+  team: platform
+```
+
+Gatekeeper checks the resource before Kubernetes accepts it.
+Result:
+
+`DENIED ❌`
+
+Now:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nginx
+  labels:
+    team: platform
+spec:
+  containers:
+    - name: nginx
+      image: nginx
+```
+
+`ALLOWED ✅`
+
+That's the core idea you need to understand.
+
+### 4. ConstraintTemplate vs Constraint
+
+This is usually the confusing part.
+
+Think about it this way:
+
+```
+ConstraintTemplate = WHAT can I check?
+
+Constraint = WHERE / HOW do I apply that check?
+```
+
+For example:
+
+```
+ConstraintTemplate
+       ↓
+"Require labels"
+       ↓
+Constraint
+       ↓
+"Require the label 'team' on Pods"
+```
+
+The **ConstraintTemplate** defines a reusable type of policy.
+
+The **Constraint** creates an instance of that policy and tells Gatekeeper where/how to enforce it.
+
+A simplified mental model:
+
+```
+Template:
+"I know how to check required labels."
+
+Constraint:
+"Great. Require the label 'team'
+on Pods in this cluster."
+```
+
+### 5. What does a ConstraintTemplate look like?
+
+In classic Gatekeeper examples, you may encounter Rego inside the template:
+
+```yaml
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredlabels
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredLabels
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        # policy logic...
+```
+
+Look at:
+
+```yaml
+kind: K8sRequiredLabels
+```
+
+It creates a new kind that you can later use in a Constraint.
+
+For example:
+
+```yaml
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredLabels
+metadata:
+  name: require-team
+spec:
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+
+  parameters:
+    labels:
+      - team
+```
+
+> Apply K8sRequiredLabels to Pods and require the team label.
+
+### 6. When should I use Gatekeeper?
+
+Gatekeeper is useful when you want cluster-wide organizational policies.
+
+For CKS, think about examples such as:
+
+- deny privileged containers;
+- require specific labels;
+- restrict allowed image registries;
+- prevent dangerous configurations;
+- require security settings;
+- enforce organizational standards.
+
+For example, your company might say:
+
+```
+All images must come from:
+
+registry.mycompany.com
+```
+
+Someone tries:
+
+```yaml
+image: randomregistry.com/nginx
+```
+
+Gatekeeper:
+
+`❌ DENIED`
+
+Someone uses:
+
+```yaml
+image: registry.mycompany.com/nginx
+```
+
+Gatekeeper:
+
+`✅ ALLOWED`
+
+This is a very good CKS-style use case.
+
+### 7. How does this relate to other CKS security controls?
+
+```
+A useful way to organize the concepts is:
+
+RBAC
+→ WHO can perform an action?
+
+NetworkPolicy
+→ WHO can communicate with whom?
+
+SecurityContext
+→ HOW does the container run?
+
+Seccomp / AppArmor
+→ WHAT can the process do?
+
+Gatekeeper / Admission Policy
+→ SHOULD Kubernetes accept this resource?
+```
+
+For example:
+
+```bash
+kubectl apply -f dangerous-pod.yaml
+```
+
+Gatekeeper can essentially say:
+
+> "I don't care that you have RBAC permission to create Pods. This particular Pod violates our policy, so I'm rejecting it."
+
+That's a powerful distinction.
+
+## 8. What might you see in a CKS question?
+
+The exam is performance-based, so think in terms of tasks rather than multiple-choice questions.
+
+A Gatekeeper-related task could conceptually give you an existing template and ask you to enforce a policy.
+
+For example:
+
+> A ConstraintTemplate named K8sRequiredLabels is already installed. Create a Constraint that requires Pods in namespace **production** to have the label environment.
+
+You would first inspect what's available:
+
+```bash
+kubectl get constrainttemplates
+```
+
+Then:
+
+```bash
+kubectl get constrainttemplates k8srequiredlabels -o yaml
+```
+
+Correct Pod:
+
+```yaml
+metadata:
+  name: test
+  labels:
+    environment: production
+```
+
+**Admission control = inspect a resource before accepting it.**
+
+**The mental model I recommend memorizing**
+
+Don't memorize huge YAML files first. Memorize this:
+
+```
+OPA
+│
+└── Policy engine
+     │
+     └── Gatekeeper
+          │
+          └── Kubernetes integration
+               │
+               ├── ConstraintTemplate
+               │     "Define the policy type"
+               │
+               └── Constraint
+                     "Apply/configure the policy"
+                          │
+                          ↓
+                    Admission request
+                          │
+                    ┌─────┴─────┐
+                  Allow        Deny
+                    ✅           ❌
+```
+
+And one sentence for your CKS notes:
+
+> **OPA is a policy engine. Gatekeeper integrates OPA with Kubernetes admission control. A ConstraintTemplate defines the policy logic/type, and a Constraint applies that policy to Kubernetes resources.**
+
+# 01/09/2026
+
+## gVisor
+
+![gVisor](images/gvisor.png)
+
+## Kata Containers
+
+- Light weight virtual machine
+
+![kata container](images/kata.png)
+
+## Container Runtime
+
+- gvisor, container runtime
+
+![gvisor-container-runtime](images/gvisor-container-runtime.png)
+
+## Lab - Using Runtimes in Kubernetes
+
+- Which is the default runtime used by this cluster?
+  `k get node -o wide`
+  `systemctl list-units --type service`
+  **R: containerd. And containerd use runc**
+
+- What is the handler used by the **runtime class** called `gvisor`?
+  `kubectl describe runtimeclasses gvisor  | grep Handler`
+
+- Which `runtimeclass` object makes use of `kata-runtime` as the handler?
+  `kubectl describe runtimeclasses kata-containers | grep Handler`
+
+- Create Runtime Class
+  **[Runtime Class](runtimeclass.yaml)**

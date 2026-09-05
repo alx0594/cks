@@ -1133,3 +1133,32 @@ And one sentence for your CKS notes:
 
 - Create Runtime Class
   **[Runtime Class](runtimeclass.yaml)**
+
+# 03/09/2026
+
+## DNS
+
+- `kubectl edit configmap coredns -n kube-system`
+
+## Pod-to-Pod Encryption
+
+![Pod-to-Pod Encryption](images/Pod-to-Pod-Encryption.png)
+
+![method-encryption](images/method-encryption.png)
+
+## Implement pod to pod encryption by use of mTLS
+
+- Peer Authentication: STRICT
+- `stioctl analyze -n test`
+
+## Introduction to Cilium
+
+## Understanding Cilium's Architecture
+
+![Cilium's Architecture](images/cilium-architecture.png)
+
+## Writing Effective Encryption Policies
+
+- Apply Network Policies
+
+![Apply Network Policies](images/apply-network-policy.png)

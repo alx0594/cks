@@ -1,0 +1,40 @@
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - "RequestReceived"
+rules:
+  # 1) NONE: health checks + non-resource endpoints
+  - level: None
+    nonResourceURLs:
+      - "/healthz*"
+      - "/livez*"
+      - "/readyz*"
+      - "/version"
+      - "/metrics"
+
+  # 2) NONE: noisy watch/list
+  - level: None
+    verbs: ["watch", "list"]
+
+  # 3) Deployment changes in citadel namespace at RequestResponse
+  - level: RequestResponse
+    namespaces: ["citadel"]
+    verbs: ["create", "update", "patch", "delete"]
+    resources:
+      - group: "apps"
+        resources: ["deployments"]
+
+  # 4) Secrets + ConfigMaps at Metadata
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets", "configmaps"]
+
+  # 5) Namespace interactions at Request
+  - level: Request
+    resources:
+      - group: ""
+        resources: ["namespaces"]
+
+  # 6) Everything else at Metadata
+  - level: Metadata

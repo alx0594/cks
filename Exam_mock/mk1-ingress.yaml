@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rocket-ingress
+  namespace: space
+spec:
+  ingressClassName: ingress-nginx
+  tls:
+    - hosts:
+        - rocket-server.local
+      secretName: rocket-tls
+  rules:
+    - host: rocket-server.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rocket-server
+                port:
+                  number: 80

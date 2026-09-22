@@ -140,3 +140,126 @@ Result:
    --as=system:serviceaccount:omni:<service-account-name> \
    -n omni
    ```
+
+### kube-bench
+
+- I need to do kube-bench labs again.
+- I should understand how I check only fails.
+
+- check FAIL: `kube-bench --benchmark cis-1.10 --config-dir /opt/kube-bench/cfg run --targets master | grep '\[FAIL\]'`
+- check issues using --check: `kube-bench --benchmark cis-1.10 --config-dir /opt/kube-bench/cfg run --targets master --check 1.1.12,1.2.5,1.3.2,1.4.1`
+
+### FALCO
+
+- Enable file_output in /etc/falco/falco.yaml on the controlplane node:
+
+```yaml
+file_output:
+  enabled: true
+  keep_alive: false
+  filename: /opt/security_incidents/alerts.log
+```
+
+- Next, add the updated rule under the /etc/falco/falco_rules.local.yaml and hot reload the Falco service:
+
+```yaml
+- rule: Write below binary dir
+  desc: an attempt to write to any file below a set of binary directories
+  condition: >
+    bin_dir and evt.dir = < and open_write
+    and not package_mgmt_procs
+    and not exe_running_docker_save
+    and not python_running_get_pip
+    and not python_running_ms_oms
+    and not user_known_write_below_binary_dir_activities
+  output: >
+    File below a known binary directory opened for writing (user_id=%user.uid file_updated=%fd.name command=%proc.cmdline)
+  priority: CRITICAL
+  tags: [filesystem, mitre_persistence]
+```
+
+- To perform hot-reload falco use
+
+`systemctl restart falco`
+
+### FALCO IA STEP BY STEP
+
+1. Localize a regra
+
+`grep -Rni "File below a known binary directory opened for writing" /etc/falco`
+
+2. Para visualizar o bloco completo:
+
+```bash
+grep -nA15 -B2 \
+  "File below a known binary directory opened for writing" \
+  /etc/falco/falco_rules.yaml
+```
+
+**This command is better because get complete block.**
+
+```bash
+ grep -A15 -B15 \
+  "File below a known binary directory opened for writing"
+  /etc/falco/falco_rules.yaml
+```
+
+3. Sobrescreva a regra no arquivo local
+
+`vi /etc/falco/falco_rules.local.yaml`
+
+No final do arquivo, adicione:
+
+```yaml
+- rule: Write below binary dir
+  output: File below a known binary directory opened for writing (user_id=%user.uid file_updated=%fd.name command=%proc.cmdline)
+  priority: CRITICAL
+  override:
+    output: replace
+    priority: replace
+```
+
+4. Valide antes de reiniciar
+
+`falco --validate /etc/falco/falco.yaml`
+
+`falco -V /etc/falco/falco_rules.local.yaml`
+
+5. Reinicie o Falco
+
+`systemctl restart falco`
+
+# Exam Mock 1 - 4 attempt
+
+### Falco
+
+1. Find field: `grep -nir "file_output" /etc/falco/falco.yaml`
+2. In vi/vim, press Esc, type: `:277`
+
+Result: 40%
+
+# Exam Mock 1 - 5 attempt
+
+## SBOM SPDX - Using bom
+
+`bom generate --image-archive /root/ImageTarballs/<image_name>.tar --format json --output ~/bugged-fruit.spdx`
+
+Result: 47%
+
+# Exam Mock 1 - 6 attempt
+
+## Admission Control
+
+```yaml
+
+  volumeMounts:
+  - mountPath: /etc/admission-controllers
+      name: admission-controllers
+      readOnly: true
+
+  volumes:
+  - hostPath:
+      path: /root/CKS/ImagePolicy/
+      type: DirectoryOrCreate
+    name: admission-controllers
+```

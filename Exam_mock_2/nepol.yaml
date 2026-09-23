@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-access
+  namespace: prod-x12cs
+spec:
+  podSelector:
+    matchLabels:
+      run: redis-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prod-x12cs
+          podSelector:
+            matchLabels:
+              backend: prod-x12cs
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prod-yx13cs
+      ports:
+        - protocol: TCP
+          port: 6379

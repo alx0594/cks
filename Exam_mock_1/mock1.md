@@ -263,3 +263,7 @@ Result: 47%
       type: DirectoryOrCreate
     name: admission-controllers
 ```
+
+# Exam Mock 1 - 7 attempt
+
+- Verify question 12. What is IP used to hosts;
